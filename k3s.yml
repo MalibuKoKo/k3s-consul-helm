@@ -1,0 +1,35 @@
+- hosts: k3s
+  gather_facts: yes
+  serial: 1
+  vars:
+    state: present
+    purge: False
+    k3s_cluster_secret: Yourk3sClusterSecret
+    install_k3s_skip_download: !!str no
+  roles:
+  - role: consul
+    when: state == 'absent'
+  - k3s
+  - role: consul
+    when: state == 'present'
+
+- hosts: k3s
+  serial: 30
+  vars:
+    reboot: True
+  tasks:
+  - name: Reboot
+    shell: sleep 2 && shutdown -r now "Ansible Reboot"
+    async: 1
+    poll: 0
+    ignore_errors: True
+    when: reboot
+  - name: Wait for Reboot
+    local_action: wait_for
+    args:
+      host: "{{ inventory_hostname }}"
+      port: 22
+      delay: 15
+      timeout: 240
+    become: False
+    when: reboot

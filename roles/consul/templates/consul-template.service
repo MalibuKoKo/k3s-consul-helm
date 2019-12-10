@@ -1,0 +1,21 @@
+[Unit]
+Description=Consul Template adon to consul
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=consul
+ExecStart=/usr/local/bin/consul-template \
+	-consul-addr 127.0.0.1:8500 \
+  -template "/etc/consul-template/haproxy.tmpl:/etc/haproxy/haproxy.cfg:service haproxy reload"
+
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=5
+Restart=on-failure
+SyslogIdentifier=consul
+
+[Install]
+WantedBy=multi-user.target

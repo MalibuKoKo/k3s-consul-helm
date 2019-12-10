@@ -1,0 +1,80 @@
+---
+- name: Make sure k3s service is stopped & disable
+  systemd:
+    state: stopped
+    enabled: no
+    daemon_reload: yes
+    name: k3s
+  ignore_errors: True
+  when: purge
+
+- name: "apt-get purge packages"
+  apt:
+    name: "{{ item }}"
+    state: absent
+    purge: yes
+    autoremove: yes
+    force: yes
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+    - docker-ce
+    - containerd.io
+    - docker.io
+  when: purge
+
+- name: snap remove lxd
+  command: snap remove lxd
+  when: purge
+
+- name: k3s-uninstall
+  shell: "{{ item }}"
+  become: True
+  loop:
+    - /usr/local/bin/k3s-uninstall.sh || true
+    - /usr/local/bin/k3s-agent-uninstall.sh || true
+  ignore_errors: True
+
+- name: Make sure cni-dhcp service is stopped
+  systemd:
+    state: stopped
+    enabled: no
+    daemon_reload: yes
+    name: cni-dhcp
+  ignore_errors: True
+  tags: cni-dhcp
+  when: purge
+
+- name: rm
+  shell: "{{ item }}"
+  become: True
+  loop:
+    - rm -Rf /etc/cni
+    - rm -Rf /etc/containerd
+    - rm -Rf /etc/docker
+    - rm -Rf /etc/kubernetes
+    - rm -Rf /etc/rancher
+    - rm -Rf /opt/cni
+    - rm -Rf /opt/containerd
+    - rm -Rf /var/lib/containerd
+    - rm -Rf /var/lib/docker
+    - rm -Rf /var/lib/etcd
+    #- rm -Rf /var/lib/kubelet
+    - rm -Rf /var/lib/rancher
+    - rm -Rf /var/log/pods/*
+    - rm -Rf /usr/libexec
+    - rm -Rf /var/lib/dockershim
+    - rm -Rf /lib/systemd/system/cni-dhcp.service
+    - rm -Rf /lib/systemd/system/cni-dhcp.socket
+    - rm -Rf /run/cni/dhcp.sock
+  when: purge
+
+- name: reset | remove network device
+  command: "ip link del {{ item }}"
+  loop:
+  - cni0
+  - docker0
+  ignore_errors: yes
+
+- shell: iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X

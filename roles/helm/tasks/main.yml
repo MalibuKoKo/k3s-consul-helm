@@ -1,0 +1,61 @@
+---
+- name: Determine if helm is installed
+  stat:
+    path: /usr/local/bin/helm
+  register: app_stat
+  ignore_errors: True
+  tags: helm
+
+- name: Determine helm version
+  shell: /usr/local/bin/helm version 2>&1 | grep -Po 'v\K((?:\d+\.?)*)'
+  register: local_version
+  changed_when: local_version.rc != 0
+  when: app_stat.stat.exists
+  tags: helm
+
+- name: set_fact local_version
+  set_fact:
+    local_version: "{{ local_version.stdout }}"
+  when: app_stat.stat.exists
+  tags: helm
+
+- name: vardump local_version
+  debug: var=local_version
+  tags: helm
+
+- name: set_fact arch
+  set_fact:
+    arch: "{% if ansible_machine in ['amd64','x86_64'] %}amd64{% elif ansible_machine in ['arm64','aarch64'] %}arm64{% elif 'arm' in ansible_machine %}arm{% endif %}"
+  tags: helm
+
+- name: Last release of {{ github_project }}
+  uri:
+    url: "https://api.github.com/repos/{{ github_project }}/releases/latest"
+    method: GET
+    body_format: json
+    return_content: yes
+  register: json_reply
+  tags: helm
+
+- set_fact:
+    # https://get.helm.sh/helm-v3.0.0-darwin-amd64.tar.gz
+    regex: "(https?://(?:[^/]+/)+[^/]+linux-{{ arch }}\\.tar\\.gz(?!\\.))"
+
+- set_fact:
+    dl_url: "{{ json_reply.json.body | regex_search(regex, multiline=True, ignorecase=True) }}"
+    remote_version: "{{ json_reply.json.tag_name | regex_search('((?:\\d+\\.?)+)', ignorecase=True) }}"
+  tags: helm
+
+- name: Unarchive {{ github_project }}
+  unarchive:
+    src: "{{ dl_url }}"
+    dest: "/usr/local/bin"
+    remote_src: yes
+    extra_opts: ['--strip-components=1']
+    exclude:
+      - LICENSE
+      - README.md
+  when: not app_stat.stat.exists or local_version is not version_compare(remote_version , '>=')
+  tags: helm
+  register: helm_installed
+

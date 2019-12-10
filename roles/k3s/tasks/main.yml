@@ -1,0 +1,5 @@
+---
+- include_tasks: install.yml
+  when: state == 'present'
+- include_tasks: uninstall.yml
+  when: state == 'absent' 

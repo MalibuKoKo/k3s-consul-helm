@@ -1,0 +1,25 @@
+---
+- name: stop & disable systemd consul service
+  service:
+    name: consul
+    daemon_reload: yes
+    state: stopped
+    enabled: false
+  ignore_errors: True
+- name: purge consul files & directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+  - /etc/systemd/system/consul.service
+  - /etc/consul.d
+  - /var/lib/consul
+  - /usr/local/bin/consul
+- name: delete consul user
+  user:
+    name: consul
+    state: absent
+- name: delete consul group
+  group:
+    name: consul
+    state: absent

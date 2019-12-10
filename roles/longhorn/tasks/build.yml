@@ -1,0 +1,27 @@
+- name: Checkout repositories
+  git:
+    repo: https://github.com/longhorn/longhorn-manager.git
+    dest: /root/longhorn-manager
+    version: v0.7.0
+    #accept_hostkey: yes
+    update: no
+    clone: yes
+  tags: git
+- copy:
+    src: files/longhorn-manager/Dockerfile
+    dest: /root/longhorn-manager/Dockerfile
+- copy:
+    src: files/longhorn-manager/package
+    dest: /root/longhorn-manager/scripts/package
+# cd /root/longhorn-manager && docker build -t malibukoko/longhorn-manager:arm64_v0.7.0 -f Dockerfile .
+# cd /root/longhorn-manager && docker rm -f longhorn-manager || true && docker run --rm --name longhorn-manager -v /var/run/docker.sock:/var/run/docker.sock -t malibukoko/longhorn-manager:arm64_v0.7.0
+- name: install packages
+  package: name=docker.io state=present update_cache=yes cache_valid_time=3600
+  when: ansible_os_family == 'Debian'
+
+
+# git clone https://github.com/longhorn/longhorn-ui.git
+
+# git clone https://github.com/longhorn/engine-ui.git
+# cd /root/longhorn-engine && docker rm -f longhorn-engine || true &&  docker run --rm --name longhorn-engine -v /var/run/docker.sock:/var/run/docker.sock -t malibukoko/longhorn-engine:arm64_v0.7.0
+# docker build -t malibukoko/longhorn-engine:arm64_v0.7.0 -f Dockerfile.dapper .

@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+cd $(dirname $0)/..
+
+ARCH=${ARCH:-arm64}
+SUFFIX=""
+[ "${ARCH}" != "amd64" ] && SUFFIX="_${ARCH}"
+
+export VERSION=${VERSION:-$(./scripts/version)}
+
+TAG=${TAG:-${VERSION}${SUFFIX}}
+REPO=${REPO:-malibukoko}
+IMAGE=${IMAGE:-${REPO}/longhorn-manager:${TAG}}
+
+if [ ! -e ./bin/longhorn-manager ]; then
+    ./scripts/build
+fi
+
+trap 'rm -rf ./package/bin' exit
+
+docker build -t ${IMAGE} -f package/Dockerfile .
+
+echo Built ${IMAGE}
+
+echo ${IMAGE} > ./bin/latest_image

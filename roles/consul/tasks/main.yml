@@ -1,0 +1,7 @@
+---
+- name: install consul
+  include_tasks: install.yml
+  when: state|default('present') == 'present'
+- name: uninstall consul
+  include_tasks: uninstall.yml
+  when: state == 'absent'

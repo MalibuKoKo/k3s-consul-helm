@@ -1,0 +1,81 @@
+#- name: Checkout repositories
+#  git:
+#    repo: https://github.com/longhorn/longhorn-manager.git
+#    dest: /root/longhorn-manager
+#    version: v0.7.0
+#    #accept_hostkey: yes
+#    update: no
+#    clone: yes
+#  tags: git
+#- copy:
+#    src: files/Dockerfile
+#    dest: /root/longhorn-manager/Dockerfile
+#- copy:
+#    src: files/package
+#    dest: /root/longhorn-manager/scripts/package
+# cd /root/longhorn-manager && docker build -t malibukoko/longhorn-manager:arm64_v0.7.0 -f Dockerfile .
+# cd /root/longhorn-manager && docker rm -f longhorn-manager || true && docker run --rm --name longhorn-manager -v /var/run/docker.sock:/var/run/docker.sock -t malibukoko/longhorn-manager:arm64_v0.7.0
+#- name: install packages
+#  package: name=docker.io state=present update_cache=yes cache_valid_time=3600
+#  when: ansible_os_family == 'Debian'
+
+- get_url:
+    url: https://raw.githubusercontent.com/longhorn/longhorn/v0.7.0/deploy/longhorn.yaml
+    dest: /tmp/longhorn.yaml
+  run_once: True
+
+- name: uncomment --kubelet-root-dir
+  replace:
+    path: /tmp/longhorn.yaml
+    after: '# manually set root directory for csi'
+    before: '# manually specify number of CSI attacher replicas'
+    regexp: '(#)'
+    replace: ''
+  run_once: True
+
+- name: fix file ends with a --- which will cause an empty resource
+  replace:
+    path: /tmp/longhorn.yaml
+    regexp: '---\s+$'
+    replace: ''
+  run_once: True
+
+- name: fix file ends with a --- which will cause an empty resource
+  replace:
+    path: /tmp/longhorn.yaml
+    regexp: 'image: longhornio/longhorn-manager:v0.7.0'
+    #replace: 'image: malibukoko/longhorn-manager:arm64_v0.7.0'
+    replace: 'image: malibukoko/longhorn-manager:96edc510-dirty_arm64'
+
+    #regexp: 'longhornio/longhorn-manager:v0.7.0'
+    #replace: 'malibukoko/longhorn-manager:arm64_v0.7.0'
+  run_once: True
+
+- name: fix file ends with a --- which will cause an empty resource
+  replace:
+    path: /tmp/longhorn.yaml
+    regexp: 'image: longhornio/longhorn-ui:v0.7.0'
+    replace: 'image: malibukoko/malibukoko/longhorn-ui:arm64_v0.7.0'
+  run_once: True
+
+#node.longhorn.io/create-default-disk: true
+#longhorn-ui
+#longhorn-driver-deployer
+#longhorn-manager
+
+- shell:
+    #kubectl get nodes --show-labels
+    kubectl label nodes {{ item.node_name }} {{ item.label_key }}={{ item.label_value }} --overwrite
+  loop:
+  - { node_name: 'rakm00', label_key: 'node.longhorn.io/create-default-disk', label_value: 'false' }
+  - { node_name: 'rakm01', label_key: 'node.longhorn.io/create-default-disk', label_value: 'false' }
+  - { node_name: 'rakm02', label_key: 'node.longhorn.io/create-default-disk', label_value: 'false' }
+
+
+- k8s:
+    state: present
+    src: /tmp/longhorn.yaml
+  run_once: true
+
+#kubectl create -f https://raw.githubusercontent.com/longhorn/longhorn/v0.7.0/examples/storageclass.yaml
+#kubectl create -f https://raw.githubusercontent.com/longhorn/longhorn/v0.7.0/examples/pvc.yaml

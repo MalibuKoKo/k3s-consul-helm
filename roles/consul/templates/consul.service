@@ -1,0 +1,25 @@
+[Unit]
+Description=Consul Service Discovery Agent
+Documentation=https://www.consul.io/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=consul
+Group=consul
+ExecStart=/usr/local/bin/consul agent \
+  -node={{ ansible_hostname }} \
+  -bind={{ ansible_default_ipv4.address }} \
+  -advertise={{ ansible_default_ipv4.address }} \
+  -data-dir=/var/lib/consul \
+  -config-dir=/etc/consul.d
+
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=5
+Restart=on-failure
+SyslogIdentifier=consul
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,48 @@
+---
+- name: Fix hostname in /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.0\.1'
+    line: "127.0.0.1 localhost {{ ansible_hostname }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: init arch fact
+  set_fact:
+    arch: "{% if ansible_machine in ['amd64','x86_64'] %}amd64{% elif ansible_machine in ['arm64','aarch64'] %}arm64{% elif 'arm' in ansible_machine %}arm{% endif %}"
+  when: install_k3s_skip_download == 'yes'
+
+- name: copy local bin to server
+  copy:
+    src: "files/bin/k3s-{{ arch }}-{{ install_k3s_version }}"
+    dest: /usr/local/bin/k3s
+    mode: '0755'
+  when: install_k3s_skip_download == 'yes'
+
+- name: define leader
+  set_fact:
+    init_ip: "{{ ansible_play_hosts | first }}"
+
+- name: snap install lxd
+  command: snap install lxd
+
+- name: install k3s server
+  script: files/get.k3s.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ install_k3s_version }}"
+    INSTALL_K3S_EXEC: --node-ip {{ ansible_default_ipv4.address }} {% if ansible_default_ipv4.address in init_ip -%}--cluster-init{% else %}--server https://{{ init_ip }}:6443{%- endif %}
+    INSTALL_K3S_SKIP_DOWNLOAD: "{{ install_k3s_skip_download }}"
+    K3S_CLUSTER_SECRET: '{{ k3s_cluster_secret }}'
+    K3S_KUBECONFIG_OUTPUT: /root/.kube/config
+    K3S_KUBECONFIG_MODE: '644'
+  ignore_errors: yes
+
+- name: Wait for port 6443 to become open on the host, don't start checking for 10 seconds
+  wait_for:
+    port: 6443
+    delay: 60
+
+- name: fix cannot access NodePort from other machines (iptables rules)
+  # https://stackoverflow.com/questions/46667659/kubernetes-cannot-access-nodeport-from-other-machines
+  shell: iptables -A FORWARD -j ACCEPT

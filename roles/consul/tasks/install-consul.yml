@@ -1,0 +1,68 @@
+---
+- name: Determine if consul is installed
+  stat:
+    path: /usr/local/bin/consul
+  register: app_stat
+  ignore_errors: True
+  tags: consul
+
+- name: Determine consul version
+  shell: "/usr/local/bin/consul version | grep -Po 'Consul\\D*\\K((?:\\d+\\.?)*)'"
+  register: local_version
+  changed_when: local_version.rc != 0
+  when: app_stat.stat.exists
+  tags: consul
+
+- name: set_fact local_version
+  set_fact:
+    local_version: "{{ local_version.stdout }}"
+  when: app_stat.stat.exists
+  tags: consul
+
+- name: vardump local_version
+  debug: var=local_version
+  tags: consul
+
+- name: set_fact arch
+  set_fact:
+    arch: "{% if ansible_machine in ['amd64','x86_64'] %}amd64{% elif ansible_machine in ['arm64','aarch64'] %}arm64{% elif 'arm' in ansible_machine %}arm{% endif %}"
+  tags: consul
+
+- name: Determine consul version
+  shell: |
+    curl -sL https://releases.hashicorp.com/consul/index.json | jq -r '[ .versions[] | select(.version | match("^\\d+\\.\\d+\\.\\d+$")) | .builds[] | select(.os == "linux") | select(.arch == "{{ arch }}") ] | sort_by(.version | split(".") | map(tonumber))[-1]'
+  register: last_version
+  changed_when: False
+  tags: consul
+
+- name: set_fact datas from curl & jq
+  set_fact:
+    datas: "{{ last_version.stdout | from_json }}"
+  tags: consul
+
+- name: set_fact url & remote_version
+  set_fact:
+    url: "{{ datas.url }}" 
+    remote_version: "{{ datas.version }}"
+  tags: consul
+
+- name: vardump app_stat
+  debug: var=app_stat
+  tags: consul
+- name: vardump local_version
+  debug: var=local_version
+  tags: consul
+- name: vardump remote_version
+  debug: var=remote_version
+  tags: consul
+- name: vardump datas
+  debug: var=datas
+  tags: consul
+
+- name: Unarchive hashicorp/consul
+  unarchive:
+    src: "{{ url }}"
+    dest: /usr/local/bin
+    remote_src: yes
+  when: not app_stat.stat.exists or local_version is not version_compare(remote_version , '>=')
+  tags: consul

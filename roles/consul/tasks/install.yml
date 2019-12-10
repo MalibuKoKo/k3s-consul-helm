@@ -1,0 +1,60 @@
+---
+- name: include tasks - consul binary install
+  include_tasks: install-consul.yml
+  when: state|default('present') == 'present'
+- name: create consul group
+  group:
+    name: consul
+    state: present
+    system: yes
+    gid: '540'
+- name: create consul user
+  user:
+    name: consul
+    shell: /sbin/nologin
+    groups: consul
+    append: yes
+    system: yes
+    uid: '550'
+- name: create /var/lib/consul directory 
+  file:
+    path: /var/lib/consul
+    state: directory
+    mode: '0775'
+    owner: consul
+    group: consul
+- name: create /etc/consul.d directory
+  file:
+    path: /etc/consul.d
+    state: directory
+    mode: '0775'
+    owner: consul
+    group: consul
+- name: generate consul config
+  template:
+    src: config.json
+    dest: /etc/consul.d/config.json
+    owner: consul
+    group: consul
+    mode: 0644
+- name: generate systemd consul service
+  template:
+    src: consul.service
+    dest: /etc/systemd/system/consul.service
+- name: restart consul service
+  service:
+    name: consul
+    daemon_reload: yes
+    state: restarted
+    enabled: true
+- name: generate consul services
+  copy:
+    content: "{{ item | to_nice_json }}"
+    dest: "/etc/consul.d/{{ item.service.name }}.json"
+    owner: consul
+    group: consul
+    mode: 0644
+  loop: "{{ services }}"
+  when: services is defined
+- name: consul reload
+  command: consul reload

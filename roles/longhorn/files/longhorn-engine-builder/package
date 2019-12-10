@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e
+
+source $(dirname $0)/version
+
+cd $(dirname $0)/..
+
+PROJECT=`basename "$PWD"`
+
+TAG=${TAG:-${VERSION}}
+REPO=${REPO:-longhornio}
+IMAGE=${REPO}/${PROJECT}:${TAG}
+IMAGE=malibukoko/longhorn-engine:arm64_v0.7.0
+
+if [ ! -x ./bin/longhorn ]; then
+    ./scripts/build
+fi
+
+cp /usr/src/tgt/pkg/tgt_*.deb ./bin/
+
+docker build -t ${IMAGE} -f package/Dockerfile .
+
+echo Built ${IMAGE}
+
+echo ${IMAGE} > ./bin/latest_image
