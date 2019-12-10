@@ -1,4 +1,4 @@
-- hosts: k3s
+- hosts: k3sm
   gather_facts: yes
   serial: 1
   vars:
@@ -13,7 +13,7 @@
   - role: consul
     when: state == 'present'
 
-- hosts: k3s
+- hosts: k3sm
   serial: 30
   vars:
     reboot: True

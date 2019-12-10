@@ -1,0 +1,20 @@
+---
+# DEFINE THE NUMBER OF VMS TO RUN
+masters_vms: 1
+workers_vms: 0
+
+# CPU
+cpus: 1
+
+# MEMORY
+memory: 512
+
+# KEYMAP
+keymap: en-us
+
+# VAGRANT BOX
+# Ubuntu: bento/ubuntu-16.04 or ubuntu/trusty64 or ubuntu/wily64
+vagrant_box: bento/ubuntu-16.04
+
+# Debug mode, runs Ansible with -vvvv
+debug: true
