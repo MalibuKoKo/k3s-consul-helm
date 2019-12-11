@@ -36,6 +36,11 @@
   gather_facts: yes
   become: yes
   become_user: root
+  pre_tasks:
+  - import_tasks: roles/consul/tasks/consul-kube.yml
+    vars:
+      namespace: consul
+      state: present
   roles:
   - role: consul
     when: state == 'present'
