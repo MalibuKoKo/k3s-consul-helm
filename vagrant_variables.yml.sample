@@ -1,7 +1,11 @@
 ---
 # DEFINE THE NUMBER OF VMS TO RUN
-masters_vms: 1
+masters_vms: 3
 workers_vms: 0
+
+k3s_cluster_secret: Yourk3sClusterSecret
+securepass: YourConsulSecurePasswd==
+net_interface: eth1
 
 # CPU
 cpus: 1
@@ -17,4 +21,4 @@ keymap: en-us
 vagrant_box: bento/ubuntu-16.04
 
 # Debug mode, runs Ansible with -vvvv
-debug: true
+debug: false

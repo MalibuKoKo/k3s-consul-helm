@@ -7,14 +7,17 @@ config_file=File.expand_path(File.join(File.dirname(__FILE__), 'vagrant_variable
 
 settings=YAML.load_file(config_file)
 
-BOX             = "generic/ubuntu1804"
-MASTERS_VMS     = (ENV['MASTERS_VMS'] || settings['masters_vms']).to_i
-WORKERS_VMS     = (ENV['WORKERS_VMS'] || settings['workers_vms']).to_i
-CPUS            = (ENV['CPUS'] || settings['cpus']).to_i
-MEMORY          = (ENV['MEMORY'] || settings['memory']).to_i
-NETWORK_PREFIX  = ENV['NETWORK_PREFIX'] || "192.168.100"
-DEBUG           = ENV['DEBUG'] || settings['debug']
-KEYMAP          = ENV['KEYMAP'] || settings['keymap']
+BOX                 = "generic/ubuntu1804"
+MASTERS_VMS         = (ENV['MASTERS_VMS'] || settings['masters_vms']).to_i
+WORKERS_VMS         = (ENV['WORKERS_VMS'] || settings['workers_vms']).to_i
+CPUS                = (ENV['CPUS'] || settings['cpus']).to_i
+MEMORY              = (ENV['MEMORY'] || settings['memory']).to_i
+NETWORK_PREFIX      = ENV['NETWORK_PREFIX'] || "192.168.100"
+DEBUG               = ENV['DEBUG'] || settings['debug']
+KEYMAP              = ENV['KEYMAP'] || settings['keymap']
+K3S_CLUSTER_SECRET  = ENV['K3S_CLUSTER_SECRET'] || settings['k3s_cluster_secret']
+NET_INTERFACE       = ENV['NET_INTERFACE'] || settings['net_interface']
+SECUREPASS          = ENV['SECUREPASS'] || settings['securepass']
 
 # --- Check for missing plugins
 required_plugins = %w( vagrant-alpine vagrant-timezone vagrant-mutate vagrant-libvirt )
@@ -40,6 +43,11 @@ ansible_provision = proc do |ansible|
   ansible.sudo = true
   ansible.groups = {
     'k3sm'  => (0..MASTERS_VMS).map { |j| "k3sm#{j}" },
+  }
+  ansible.extra_vars = {
+    k3s_cluster_secret: K3S_CLUSTER_SECRET,
+    securepass: SECUREPASS,
+    net_interface: NET_INTERFACE,
   }
   if DEBUG then
     ansible.verbose = '-vvvv'
