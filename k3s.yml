@@ -32,3 +32,27 @@
   - k3s
   - role: consul
     when: state == 'present'
+    vars:
+      namespace: consul # consul or kube-system
+      bootstrap_expect: "{% if ansible_play_hosts | length > 1 %}{{ ansible_play_hosts | length - 1}}{% else %}1{% endif %}"
+      datacenter: mydc
+      domain: consul
+      enable_syslog: !!str false
+      #securepass: YourConsulSecurePasswd==
+      ui: !!str false
+      state: present  # present or absent
+      services:
+      - service:
+          name: k8s
+          tags:
+          - kubernetes API Server
+          port: 6443
+          check:
+            http: 'https://localhost:6443/healthz'
+            tls_skip_verify: true
+            method: GET
+            header:
+              Authorization:
+              - "Bearer {{ token }}"
+            interval: 5s
+            timeout: 1s
