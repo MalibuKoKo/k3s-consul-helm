@@ -37,8 +37,9 @@ SCRIPT
 
 ansible_provision = proc do |ansible|
   ansible.playbook = 'k3s.yml'
+  ansible.sudo = true
   ansible.groups = {
-    'k3sm'  => (0..MASTERS_VMS - 1).map { |j| "k3sm#{j}" },
+    'k3sm'  => (0..MASTERS_VMS).map { |j| "k3sm#{j}" },
   }
   if DEBUG then
     ansible.verbose = '-vvvv'
