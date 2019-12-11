@@ -4,8 +4,8 @@
 
 ### ansible
 
-
 #### deploy
+
 ```yaml
 cat << EOF > k3s-config.yml
 k3s_cluster_secret: Yourk3sClusterSecret
@@ -25,20 +25,27 @@ ansible-playbook \
 
 #### dns round robin kubernetes api server
 
-test dns: `dig @192.168.100.201 -p 8600 k3s.service.mydc.consul A +short`
+##### test
 
-### obtain default token & request kubernetes api
+```bash
+dig @192.168.100.201 -p 8600 k3s.service.mydc.consul A +short
+dig @192.168.100.202 -p 8600 k3s.service.mydc.consul A +short
+dig @192.168.100.203 -p 8600 k3s.service.mydc.consul A +short
+```
 
-APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
-SECRET_NAME=$(kubectl get secrets | grep ^default | cut -f1 -d ' ')
-TOKEN=$(kubectl describe secret $SECRET_NAME | grep -E '^token' | cut -f2 -d':' | tr -d " ")
-curl $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure | jq
+##### dns server
 
-kubectl get secrets `kubectl get secrets | grep ^default | cut -f1 -d ' '` -o json | jq -r '.data.token' | base64 -d
+###### dnsmasq
 
-APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ") && \
-TOKEN=$(kubectl get secret `kubectl get secrets --all-namespaces | grep -Po "(consul-probe\S+)"` -n consul -o json | jq -r '.data.token' |base64 -d) && \
-curl --header "Authorization: Bearer $TOKEN" --insecure $APISERVER/api
+declare **consul** domain in `/etc/dnsmasq.conf`
+
+Example:
+
+```
+server=/consul/192.168.100.201#8600
+server=/consul/192.168.100.202#8600
+server=/consul/192.168.100.203#8600
+```
 
 ### troubleshooting
 
