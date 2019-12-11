@@ -30,6 +30,13 @@
   - role: consul
     when: state == 'absent'
   - k3s
+
+# preserves this order in order to obtain all facts (required for generates consul config.json file)
+- hosts: k3sm
+  gather_facts: yes
+  become: yes
+  become_user: root
+  roles:
   - role: consul
     when: state == 'present'
     vars:
