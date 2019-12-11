@@ -2,7 +2,7 @@
 - name: Fix hostname in /etc/hosts
   lineinfile:
     path: /etc/hosts
-    regexp: '^127\.0\.0\.1'
+    regexp: '127.0.0.1\s+localhost.*$'
     line: "127.0.0.1 localhost {{ ansible_hostname }}"
     owner: root
     group: root
@@ -24,8 +24,13 @@
   set_fact:
     init_ip: "{{ ansible_play_hosts | first }}"
 
+- name: define leader ip
+  set_fact:
+    init_ip: hostvars[init_ip].ansible_default_ipv4.address
+
 - name: snap install lxd
-  command: snap install lxd
+  snap:
+    name: lxd
 
 - name: install k3s server
   script: files/get.k3s.sh
