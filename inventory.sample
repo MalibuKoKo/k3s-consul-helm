@@ -7,19 +7,7 @@
 [k3sm3]
 192.168.200.3    ansible_connection=ssh  ansible_user=skynet
 
-[masters]
+[k3sm]
 k3sm1
 k3sm2
 k3sm3
-
-[k3sm:children]
-masters
-
-[consul:children]
-masters
-
-[helm:children]
-masters
-
-[longhorn:children]
-masters
