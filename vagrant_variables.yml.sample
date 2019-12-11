@@ -4,7 +4,7 @@ masters_vms: 3
 workers_vms: 0
 
 k3s_cluster_secret: Yourk3sClusterSecret
-securepass: YourConsulSecurePasswd==
+consul_encrypt_securepass: YourConsulSecurePasswd==
 net_interface: eth1
 
 # CPU

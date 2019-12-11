@@ -1,4 +1,0 @@
-- hosts: "{{ groups['longhorn']|random }}"
-  serial: 1
-  roles:
-  - longhorn

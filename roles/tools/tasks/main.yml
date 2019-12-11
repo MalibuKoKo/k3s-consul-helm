@@ -1,0 +1,26 @@
+---
+- block:
+  - name: install aptitude
+    package: name=aptitude force_apt_get=yes
+  - name: install packages
+    package: name={{ item }} state=present update_cache=yes cache_valid_time=3600
+    loop:
+      - python-pip
+      - python3-pip
+      - jq
+      - curl
+      - open-iscsi
+  when: ansible_os_family == 'Debian'
+
+- name: install python packages
+  pip: name={{ item.name }} executable={{ item.executable }}
+  loop:
+    - { name: 'openshift', executable: 'pip' }
+    - { name: 'openshift', executable: 'pip3' }
+
+- command: pip install --upgrade requests
+- command: pip3 install --upgrade requests
+
+- name: snap install lxd
+  snap:
+    name: lxd

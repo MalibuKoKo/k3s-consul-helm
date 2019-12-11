@@ -1,34 +1,17 @@
+- hosts: all
+  become: yes
+  become_user: root
+  roles:
+  - tools
+
 - hosts: k3sm
   gather_facts: yes
   become: yes
   become_user: root
   serial: 1
-  vars:
-    state: present
-    purge: False
-    k3s_cluster_secret: Yourk3sClusterSecret
-    install_k3s_skip_download: !!str no
-  pre_tasks:
-  - block:
-    - name: install aptitude
-      package: name=aptitude force_apt_get=yes
-    - name: install packages
-      package: name={{ item }} state=present update_cache=yes cache_valid_time=3600
-      loop:
-        - python-pip
-        - python3-pip
-        - jq
-        - curl
-        - open-iscsi
-    when: ansible_os_family == 'Debian'
-  - name: install python packages
-    pip: name={{ item.name }} executable={{ item.executable }}
-    loop:
-      - { name: 'openshift', executable: 'pip' }
-      - { name: 'openshift', executable: 'pip3' }
+  #vars:
+  #  k3s_cluster_secret: Yourk3sClusterSecret     # USE ANSIBLE EXTRA-VARS
   roles:
-  - role: consul
-    when: state == 'absent'
   - k3s
 
 # preserves this order in order to obtain all facts (required for generates consul config.json file)
@@ -43,19 +26,17 @@
       state: present
   roles:
   - role: consul
-    when: state == 'present'
     vars:
       namespace: consul # consul or kube-system
       bootstrap_expect: "{% if ansible_play_hosts | length > 1 %}{{ ansible_play_hosts | length - 1}}{% else %}1{% endif %}"
       datacenter: mydc
       domain: consul
       enable_syslog: !!str false
-      #securepass: YourConsulSecurePasswd==
+      #consul_securepass: YourConsulSecurePasswd==  # USE ANSIBLE EXTRA-VARS
       ui: !!str false
-      state: present  # present or absent
       services:
       - service:
-          name: k8s
+          name: k3s
           tags:
           - kubernetes API Server
           port: 6443

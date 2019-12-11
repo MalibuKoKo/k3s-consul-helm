@@ -2,6 +2,31 @@
 
 ## k3s
 
+### ansible
+
+
+#### deploy
+```yaml
+cat << EOF > k3s-config.yml
+k3s_cluster_secret: Yourk3sClusterSecret
+consul_encrypt_securepass: YourConsulSecurePasswd==
+net_interface: eth1   # network interface to use
+datacenter: mydc # consul datacenter
+domain: consul # consul domain
+EOF
+```
+
+```bash
+ansible-playbook \
+    --inventory inventory \
+    --extra-vars "@k3s-config.yml" \
+    ./consul.yml
+```
+
+#### dns round robin kubernetes api server
+
+test dns: `dig @192.168.100.201 -p 8600 k3s.service.mydc.consul A +short`
+
 ### obtain default token & request kubernetes api
 
 APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")

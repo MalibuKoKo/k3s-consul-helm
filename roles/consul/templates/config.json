@@ -12,7 +12,7 @@
             "only_passing": true
         },
     "enable_syslog": {{ enable_syslog|default('true') }},
-    "encrypt": "{{ securepass }}",
+    "encrypt": "{{ consul_encrypt_securepass }}",
     "leave_on_terminate": true,
     "log_level": "{{ log_level|default('INFO') }}",
     "rejoin_after_leave": true,
