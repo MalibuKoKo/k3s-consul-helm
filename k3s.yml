@@ -16,6 +16,7 @@
     when: state == 'present'
 
 - hosts: k3sm
+  gather_facts: yes
   become: yes
   become_user: root
   serial: 30
