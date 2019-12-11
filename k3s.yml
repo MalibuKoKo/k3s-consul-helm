@@ -8,33 +8,27 @@
     purge: False
     k3s_cluster_secret: Yourk3sClusterSecret
     install_k3s_skip_download: !!str no
+  pre_tasks:
+  - block:
+    - name: install aptitude
+      package: name=aptitude force_apt_get=yes
+    - name: install packages
+      package: name={{ item }} state=present update_cache=yes cache_valid_time=3600
+      loop:
+        - python-pip
+        - python3-pip
+        - jq
+        - curl
+        - open-iscsi
+    when: ansible_os_family == 'Debian'
+  - name: install python packages
+    pip: name={{ item.name }} executable={{ item.executable }}
+    loop:
+      - { name: 'openshift', executable: 'pip' }
+      - { name: 'openshift', executable: 'pip3' }
   roles:
   - role: consul
     when: state == 'absent'
   - k3s
   - role: consul
     when: state == 'present'
-
-- hosts: k3sm
-  gather_facts: yes
-  become: yes
-  become_user: root
-  serial: 30
-  vars:
-    reboot: True
-  tasks:
-  - name: Reboot
-    shell: sleep 2 && shutdown -r now "Ansible Reboot"
-    async: 1
-    poll: 0
-    ignore_errors: True
-    when: reboot
-  - name: Wait for Reboot
-    local_action: wait_for
-    args:
-      host: "{{ inventory_hostname }}"
-      port: 22
-      delay: 15
-      timeout: 240
-    become: False
-    when: reboot
