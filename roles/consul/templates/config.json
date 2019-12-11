@@ -1,6 +1,6 @@
 {
-    "advertise_addr": "{{ ansible_default_ipv4.address }}",
-    "bind_addr": "{{ ansible_default_ipv4.address }}",
+    "advertise_addr": "{{ ansible_facts[net_interface].ipv4.address }}",
+    "bind_addr": "{{ ansible_facts[net_interface].ipv4.address }}",
     "bootstrap_expect": {{ bootstrap_expect }},
     "client_addr": "0.0.0.0",
     "datacenter": "{{ datacenter|default('mydc') }}",
@@ -17,12 +17,12 @@
     "log_level": "{{ log_level|default('INFO') }}",
     "rejoin_after_leave": true,
     "retry_join": [
-        {% for machine in ansible_play_hosts %}"{{ hostvars[machine]['ansible_default_ipv4']['address'] }}"{% if not loop.last %},{% endif %}{% endfor %}
+        {% for machine in ansible_play_hosts %}"{{ hostvars[machine].ansible_facts[net_interface].ipv4.address }}"{% if not loop.last %},{% endif %}{% endfor %}
 
     ],
     "server": true,
     "start_join": [
-        {% for machine in ansible_play_hosts %}"{{ hostvars[machine]['ansible_default_ipv4']['address'] }}"{% if not loop.last %},{% endif %}{% endfor %}
+        {% for machine in ansible_play_hosts %}"{{ hostvars[machine].ansible_facts[net_interface].ipv4.address }}"{% if not loop.last %},{% endif %}{% endfor %}
 
     ],
     "ui": {{ ui|default('false') }}
