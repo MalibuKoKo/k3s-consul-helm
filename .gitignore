@@ -2,3 +2,4 @@ roles/k3s/files/bin/*
 .vagrant
 vagrant_variables.yml
 inventory
+k3s-config.yml

@@ -20,7 +20,7 @@ EOF
 ansible-playbook \
     --inventory inventory \
     --extra-vars "@k3s-config.yml" \
-    ./consul.yml
+    ./k3s-consul.yml
 ```
 
 #### dns round robin kubernetes api server
