@@ -5,21 +5,46 @@
   - name: install packages
     package: name={{ item }} state=present update_cache=yes cache_valid_time=3600
     loop:
+      - python-setuptools
       - python-pip
       - python3-pip
       - jq
       - curl
       - open-iscsi
+      #- snapd
+  - name: install python packages
+    pip: name={{ item.name }} executable={{ item.executable }} state={{ item.state | default('present') }}
+    loop:
+      - { name: 'openshift', executable: 'pip' }
+      - { name: 'requests', executable: 'pip3', state: 'latest'  }
+  - command: pip install --upgrade requests
   when: ansible_os_family == 'Debian'
 
-- name: install python packages
-  pip: name={{ item.name }} executable={{ item.executable }}
-  loop:
-    - { name: 'openshift', executable: 'pip' }
-    - { name: 'openshift', executable: 'pip3' }
-
-- command: pip install --upgrade requests
-- command: pip3 install --upgrade requests
+- block:
+  - name: install packages
+    package: name={{ item }} state=present update_cache=yes
+    loop:
+      - python-setuptools
+      - python3-pip
+    #  - jq
+      - curl
+    #  - open-iscsi
+      - epel-release
+      - yum-plugin-copr
+  - name: yum copr enable -y ngompa/snapcore-el7
+    command: yum copr enable -y ngompa/snapcore-el7
+  - name: install curl
+    yum: name=curl state=present
+  - name: install snapd
+    package: name=snapd state=present update_cache=yes
+  #- command: systemctl enable --now snapd.socket
+  - service: name=snapd.socket enabled=yes
+  - name: install python packages
+    pip: name={{ item.name }} executable={{ item.executable }} state={{ item.state | default('present') }}
+    loop:
+      - { name: 'openshift', executable: 'pip3' }
+      - { name: 'requests', executable: 'pip3', state: 'latest'  }
+  when: ansible_os_family == 'RedHat'
 
 - name: snap install lxd
   snap:
