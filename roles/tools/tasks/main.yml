@@ -31,8 +31,17 @@
     #  - open-iscsi
       - epel-release
       - yum-plugin-copr
-  - name: yum copr enable -y ngompa/snapcore-el7
-    command: yum copr enable -y ngompa/snapcore-el7
+  - name: Add ngompa/snapcore-el7
+    yum_repository:
+      name: copr:copr.fedorainfracloud.org:ngompa:snapcore-el7
+      description: Copr repo for snapcore-el7 owned by ngompa
+      file: _copr_ngompa-snapcore-el7
+      baseurl: https://copr-be.cloud.fedoraproject.org/results/ngompa/snapcore-el7/epel-7-$basearch/
+      skip_if_unavailable: yes
+      gpgcheck: yes
+      repo_gpgcheck: no
+      enabled: yes
+      gpgkey: https://copr-be.cloud.fedoraproject.org/results/ngompa/snapcore-el7/pubkey.gpg
   - name: install curl
     yum: name=curl state=present
   - name: install snapd
@@ -44,6 +53,9 @@
     loop:
       - { name: 'openshift', executable: 'pip3' }
       - { name: 'requests', executable: 'pip3', state: 'latest'  }
+  - name: snap install jq
+    snap:
+      name: jq
   when: ansible_os_family == 'RedHat'
 
 - name: snap install lxd
