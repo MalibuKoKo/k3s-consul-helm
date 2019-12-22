@@ -25,6 +25,9 @@
     package: name={{ item }} state=present update_cache=yes
     loop:
       - python-setuptools
+      - python2-pip
+      - python2-ruamel-yaml
+      - unzip
       - python3-pip
     #  - jq
       - curl
@@ -55,11 +58,14 @@
   - name: install python packages
     pip: name={{ item.name }} executable={{ item.executable }} state={{ item.state | default('present') }}
     loop:
+#      - { name: 'requests', executable: 'pip', state: 'latest'  }
+#      - { name: 'setuptools', executable: 'pip', state: 'latest'  }
+#      - { name: 'openshift', executable: 'pip' }
       - { name: 'openshift', executable: 'pip3' }
       - { name: 'requests', executable: 'pip3', state: 'latest'  }
-  - name: snap install jq
-    snap:
-      name: jq
+  - command: pip install requests --ignore-installed
+  - command: yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+  - command: yum install jq -y
   when: ansible_os_family == 'RedHat'
 
 - name: snap install lxd
