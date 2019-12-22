@@ -1,24 +1,46 @@
 ---
-- name: Namespace
-  k8s_raw:
-    name: "{{ namespace }}"
-    api_version: v1
-    kind: Namespace
-    state: "{{ state }}"
+- block:
+  - shell: firewall-cmd --zone=public --permanent --add-port={8300,8301,8302,8400,8500,8600}/tcp
+  - shell: firewall-cmd --zone=public --permanent --add-port={8301,8302,8600}/udp
+  - command: firewall-cmd --reload
+  when: ansible_os_family == 'RedHat'
+
+- set_fact:
+    action: "{{ actions[state|default('present')] }}"
+  vars:
+    actions:
+      present: apply
+      absent: delete
+
+- block:
+  - copy:
+      content: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: {{ namespace }}
+      dest: /tmp/namespace.yml
+      mode: '0644'
+      owner: root
+      group: root
+  - shell: "kubectl {{ action }} -f /tmp/namespace.yml"
   run_once: yes
   when: namespace is not match('^(default|kube-system|kube-public|kube-node-lease)$')
-
+  
 # https://kubernetes.io/docs/reference/access-authn-authz/rbac/#service-account-permissions
-- name: ServiceAccount
-  k8s_raw:
-    state: "{{ state }}"
-    definition:
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: consul-probe
-        namespace: "{{ namespace }}" # default or kube-system
-      #automountServiceAccountToken: false
+- block:
+  - copy:
+      content: |
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: consul-probe
+          namespace: {{ namespace }}
+      dest: /tmp/sa.yml
+      mode: '0644'
+      owner: root
+      group: root
+  - shell: "kubectl {{ action }} -f /tmp/sa.yml -n {{ namespace }}"
   run_once: yes
 
 - shell: "kubectl get serviceaccounts consul-probe -n {{ namespace }} -o json | jq -r '.secrets[] | select(.name | match(\"^consul-probe-token-[a-z0-9]+$\") ) | .name '"
@@ -38,47 +60,45 @@
   run_once: yes
   when: state|default('present') == 'present'
 
-- name: &role ClusterRole # Role or ClusterRole
-  k8s_raw:
-    state: "{{ state }}"
-    definition:
-      apiVersion: rbac.authorization.k8s.io/v1beta1
-      kind: *role
-      metadata:
-        name: healthcheck-api
-        namespace: "{{ namespace }}"
-      rules:
-#      - apiGroups:
-#        - ''
-#        resources:
-#        - '*'
-#        verbs:
-#        - 'get'
-      - nonResourceURLs:
-        - '/healthz'
-        #- ['/apis','/apis/*','/healthz','/healthz/*','/livez','/livez/*','/metrics','/openapi/*','/readyz','/readyz/*','/version']
-        verbs:
-        - 'get'
-#     subjects:
-#     - kind: Group
-#       name: admin
-#       apiGroup: rbac.authorization.k8s.io
+- block:
+  - copy:
+      content: |
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: ClusterRole
+        metadata:
+          name: healthcheck-api
+          namespace: {{ namespace }}
+        rules:
+        - nonResourceURLs:
+          - '/healthz'
+          verbs:
+          - 'get'
+      dest: /tmp/cr.yml
+      mode: '0644'
+      owner: root
+      group: root
+  - shell: "kubectl {{ action }} -f /tmp/cr.yml -n {{ namespace }}"
   run_once: yes
-- name: &rb ClusterRoleBinding # RoleBinding or ClusterRoleBinding
-  k8s_raw:
-    state: "{{ state }}"
-    definition:
-      apiVersion: rbac.authorization.k8s.io/v1beta1
-      kind: *rb
-      metadata:
-        name: healthcheck-api_consul-probe
-        namespace: "{{ namespace }}"
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: *role
-        name: healthcheck-api
-      subjects:
-      - kind: ServiceAccount # ServiceAccount or User
-        name: consul-probe
-        namespace: "{{ namespace }}"
+
+- block:
+  - copy:
+      content: |
+        apiVersion: rbac.authorization.k8s.io/v1beta1
+        kind: ClusterRoleBinding
+        metadata:
+          name: healthcheck-api_consul-probe
+          namespace: {{ namespace }}
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: healthcheck-api
+        subjects:
+        - kind: ServiceAccount
+          name: consul-probe
+          namespace: {{ namespace }}
+      dest: /tmp/crb.yml
+      mode: '0644'
+      owner: root
+      group: root
+  - shell: "kubectl {{ action }} -f /tmp/crb.yml -n {{ namespace }}"
   run_once: yes
