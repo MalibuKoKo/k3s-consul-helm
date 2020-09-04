@@ -3,3 +3,4 @@ roles/k3s/files/bin/*
 vagrant_variables.yml
 inventory
 k3s-config.yml
+extra-vars.yml
