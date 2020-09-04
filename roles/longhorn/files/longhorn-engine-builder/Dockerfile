@@ -1,7 +1,7 @@
 FROM ubuntu:18.04
 # FROM arm=armhf/ubuntu:16.04
 
-ARG DAPPER_HOST_ARCH=arm64
+ARG DAPPER_HOST_ARCH=amd64
 ARG http_proxy
 ARG https_proxy
 ENV HOST_ARCH=${DAPPER_HOST_ARCH} ARCH=${DAPPER_HOST_ARCH}
@@ -18,9 +18,9 @@ WORKDIR ${DAPPER_SOURCE}
 # Install packages
 RUN apt-get update && \
     apt-get install -y cmake wget curl git less file \
-        libglib2.0-dev libkmod-dev libnl-genl-3-dev linux-libc-dev pkg-config psmisc python-tox qemu-utils fuse python-dev \
+        libglib2.0-dev libkmod-dev libnl-genl-3-dev linux-libc-dev pkg-config psmisc python-tox qemu-utils fuse python3-dev \
         devscripts debhelper bash-completion librdmacm-dev libibverbs-dev xsltproc docbook-xsl \
-        libconfig-general-perl libaio-dev libc6-dev sg3-utils iptables libltdl7 python-pip uuid-runtime libdevmapper-dev iproute2
+        libconfig-general-perl libaio-dev libc6-dev sg3-utils iptables libltdl7 python3-pip uuid-runtime libdevmapper-dev iproute2
 
 # needed for ${!var} substitution
 RUN rm -f /bin/sh && ln -s /bin/bash /bin/sh
@@ -34,12 +34,21 @@ RUN wget -O - https://storage.googleapis.com/golang/go1.13.3.linux-${!GOLANG_ARC
 # Docker
 ENV DOCKER_URL_amd64=https://download.docker.com/linux/ubuntu/dists/bionic/pool/stable/amd64/docker-ce_18.06.3~ce~3-0~ubuntu_amd64.deb \
     DOCKER_URL_arm64=https://download.docker.com/linux/ubuntu/dists/bionic/pool/stable/arm64/docker-ce_18.06.3~ce~3-0~ubuntu_arm64.deb \
+    DOCKER_URL_arm=https://download.docker.com/linux/ubuntu/dists/bionic/pool/stable/arm64/docker-ce_18.06.3~ce~3-0~ubuntu_arm64.deb \
     DOCKER_URL=DOCKER_URL_${ARCH}
 
 RUN wget ${!DOCKER_URL} -O docker_ce_${ARCH} && dpkg -i docker_ce_${ARCH}
 
 # Minio
-RUN wget -O /usr/bin/minio https://dl.minio.io/server/minio/release/linux-amd64/archive/minio.RELEASE.2018-05-25T19-49-13Z && chmod +x /usr/bin/minio
+RUN mkdir -p $GOPATH/src/github.com/minio && \
+cd $GOPATH/src/github.com/minio && \
+git clone https://github.com/minio/minio.git && \
+cd minio/ && \
+git checkout RELEASE.2018-05-25T19-49-13Z && \
+make && \
+make install && \
+cp $GOPATH/bin/minio /usr/bin/minio && \
+chmod +x /usr/bin/minio
 
 # Install libqcow
 RUN wget -O - https://s3-us-west-1.amazonaws.com/rancher-longhorn/libqcow-alpha-20181117.tar.gz | tar xvzf - -C /usr/src
@@ -51,13 +60,21 @@ RUN cd /usr/src/libqcow-20181117 && \
 
 # GRPC dependencies
 # GRPC health probe
-RUN wget -O /usr/local/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.3.1/grpc_health_probe-linux-arm64 && \
+ENV GRPC_HEALTH_PROBE_URL_amd64=https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.3.0/grpc_health_probe-linux-amd64 \
+    GRPC_HEALTH_PROBE_URL_arm64=https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.3.1/grpc_health_probe-linux-arm64 \
+    GRPC_HEALTH_PROBE_URL=GRPC_HEALTH_PROBE_URL_${ARCH}
+
+RUN wget ${!GRPC_HEALTH_PROBE_URL} -O /usr/local/bin/grpc_health_probe && \
     chmod +x /usr/local/bin/grpc_health_probe
 
 # protoc
+ENV PROTOC_URL_amd64=https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-linux-x86_64.zip \
+    PROTOC_URL_arm64=https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-linux-aarch_64.zip \
+    PROTOC_URL=PROTOC_URL_${ARCH}
+
 RUN cd /usr/src && \
-    wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-linux-aarch_64.zip && \
-    unzip protoc-3.7.1-linux-aarch_64.zip -d /usr/local/
+    wget ${!PROTOC_URL} -O protoc.zip && \
+    unzip protoc.zip -d /usr/local/
 
 # protoc-gen-go
 RUN cd /go/src/github.com/ && \
@@ -71,13 +88,13 @@ RUN cd /go/src/github.com/ && \
     cp protoc-gen-go /usr/local/bin
 
 # python grpc-tools
-RUN pip install grpcio==1.22.0 grpcio_tools==1.22.0
+RUN pip3 install grpcio==1.22.0 grpcio_tools==1.22.0
 
 # Build liblonghorn
 RUN cd /usr/src && \
-    git clone https://github.com/MalibuKoKo/liblonghorn && \
+    git clone https://github.com/rancher/liblonghorn.git && \
     cd liblonghorn && \
-    git checkout b120abfc31e1ce5c2ab6b93419a8a2e47a31a0ce && \
+    git checkout 6592b9967d1b5acbb51a5596abfe0a0d7bad16dc && \
     make deb && \
     dpkg -i ./pkg/liblonghorn_*.deb
 
@@ -85,7 +102,7 @@ RUN cd /usr/src && \
 RUN cd /usr/src && \
     git clone https://github.com/rancher/tgt.git && \
     cd tgt && \
-    git checkout 7876a0831d9193449b289824132f25f08344543d && \
+    git checkout e042fdd3616ca90619637b5826695a3de9b5dd8e && \
     ./scripts/build-pkg.sh deb && \
     dpkg -i ./pkg/tgt_*.deb
 
@@ -94,16 +111,7 @@ RUN mkdir integration/
 COPY integration/setup.py integration/tox.ini integration/requirements.txt integration/flake8-requirements.txt integration/
 RUN cd integration && tox --notest
 
-RUN cd /usr/src && \
-    git clone https://github.com/grpc-ecosystem/grpc-health-probe.git && \
-    cd grpc-health-probe && \
-    git checkout c946359820cab80790d08dbc3a564b4d4fe6df4a && \
-    go build && \
-    cp grpc-health-probe /usr/local/bin/grpc_health_probe
-
-COPY . /go/src/github.com/longhorn/longhorn-engine/
-
 VOLUME /tmp
 ENV TMPDIR /tmp
-ENTRYPOINT ["/go/src/github.com/longhorn/longhorn-engine/scripts/entry"]
+ENTRYPOINT ["./scripts/entry"]
 CMD ["ci"]

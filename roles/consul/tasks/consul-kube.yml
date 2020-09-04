@@ -1,7 +1,32 @@
 ---
 - block:
-  - shell: firewall-cmd --zone=public --permanent --add-port={8300,8301,8302,8400,8500,8600}/tcp
-  - shell: firewall-cmd --zone=public --permanent --add-port={8301,8302,8600}/udp
+  - name: set ip_address
+    set_fact:
+      ip_address: "{{ ansible_facts[net_interface].ipv4.address }}/{{ ansible_facts[net_interface].ipv4.netmask }}"
+      cidr: "{{ ip_address | ipaddr('network/prefix') }}"
+
+  - name: open consul ports
+    firewalld:
+      port: "{{ item.port }}/{{ item.protocol }}"
+      zone: "{{ item.zone }}"
+      source: "{{ item.source }}"
+      permanent: true
+      immediate: true
+      state: enabled
+    loop:
+      - { 'port': '8300', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8301', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8302', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8400', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8500', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8600', 'protocol': 'tcp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8301', 'protocol': 'udp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8302', 'protocol': 'udp', 'zone': 'public', 'source': "{{ cidr }}" }
+      - { 'port': '8600', 'protocol': 'udp', 'zone': 'public', 'source': "{{ cidr }}" }
+    tags: firewall
+
+#  - shell: firewall-cmd --zone=public --permanent --add-port={8300,8301,8302,8400,8500,8600}/tcp
+#  - shell: firewall-cmd --zone=public --permanent --add-port={8301,8302,8600}/udp
   - command: firewall-cmd --reload
   when: ansible_os_family == 'RedHat'
 

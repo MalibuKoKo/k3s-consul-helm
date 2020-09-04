@@ -20,6 +20,11 @@
   - command: pip install --upgrade requests
   when: ansible_os_family == 'Debian'
 
+# yum install yum-plugin-copr epel-release
+# yum copr enable ngompa/snapcore-el7
+# yum install snapd
+# systemctl enable --now snapd.socket
+
 - block:
   - name: install packages
     package: name={{ item }} state=present update_cache=yes
