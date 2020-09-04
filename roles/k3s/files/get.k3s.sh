@@ -8,7 +8,7 @@ set -e
 #
 # Example:
 #   Installing a server without traefik:
-#     curl ... | INSTALL_K3S_EXEC="--no-deploy=traefik" sh -
+#     curl ... | INSTALL_K3S_EXEC="--disable=traefik" sh -
 #   Installing an agent to point at a server:
 #     curl ... | K3S_TOKEN=xxx K3S_URL=https://server-url:6443 sh -
 #
@@ -26,12 +26,19 @@ set -e
 #     If set to 'skip' will not create symlinks, 'force' will overwrite,
 #     default will symlink if command does not exist in path.
 #
+#   - INSTALL_K3S_SKIP_ENABLE
+#     If set to true will not enable or start k3s service.
+#
 #   - INSTALL_K3S_SKIP_START
 #     If set to true will not start k3s service.
 #
 #   - INSTALL_K3S_VERSION
-#     Version of k3s to download from github. Will attempt to download the
-#     latest version if not specified.
+#     Version of k3s to download from github. Will attempt to download from the
+#     stable channel if not specified.
+#
+#   - INSTALL_K3S_COMMIT
+#     Commit of k3s to download from temporary cloud storage.
+#     * (for developer & QA use)
 #
 #   - INSTALL_K3S_BIN_DIR
 #     Directory to install k3s binary, links, and uninstall script to, or use
@@ -52,11 +59,11 @@ set -e
 #     of EXEC and script args ($@).
 #
 #     The following commands result in the same behavior:
-#       curl ... | INSTALL_K3S_EXEC="--no-deploy=traefik" sh -s -
-#       curl ... | INSTALL_K3S_EXEC="server --no-deploy=traefik" sh -s -
-#       curl ... | INSTALL_K3S_EXEC="server" sh -s - --no-deploy=traefik
-#       curl ... | sh -s - server --no-deploy=traefik
-#       curl ... | sh -s - --no-deploy=traefik
+#       curl ... | INSTALL_K3S_EXEC="--disable=traefik" sh -s -
+#       curl ... | INSTALL_K3S_EXEC="server --disable=traefik" sh -s -
+#       curl ... | INSTALL_K3S_EXEC="server" sh -s - --disable=traefik
+#       curl ... | sh -s - server --disable=traefik
+#       curl ... | sh -s - --disable=traefik
 #
 #   - INSTALL_K3S_NAME
 #     Name of systemd service to create, will default from the k3s exec command
@@ -65,14 +72,30 @@ set -e
 #   - INSTALL_K3S_TYPE
 #     Type of systemd service to create, will default from the k3s exec command
 #     if not specified.
+#
+#   - INSTALL_K3S_SELINUX_WARN
+#     If set to true will continue if k3s-selinux policy is not found.
+#
+#   - INSTALL_K3S_CHANNEL_URL
+#     Channel URL for fetching k3s download URL.
+#     Defaults to 'https://update.k3s.io/v1-release/channels'.
+#
+#   - INSTALL_K3S_CHANNEL
+#     Channel to use for fetching k3s download URL.
+#     Defaults to 'stable'.
 
 GITHUB_URL=https://github.com/rancher/k3s/releases
+STORAGE_URL=https://storage.googleapis.com/k3s-ci-builds
 DOWNLOADER=
 
 # --- helper functions for logs ---
 info()
 {
     echo '[INFO] ' "$@"
+}
+warn()
+{
+    echo '[WARN] ' "$@" >&2
 }
 fatal()
 {
@@ -118,6 +141,19 @@ escape_dq() {
     printf '%s' "$@" | sed -e 's/"/\\"/g'
 }
 
+# --- ensures $K3S_URL is empty or begins with https://, exiting fatally otherwise ---
+verify_k3s_url() {
+    case "${K3S_URL}" in
+        "")
+            ;;
+        https://*)
+            ;;
+        *)
+            fatal "Only https:// URLs are supported for K3S_URL (have ${K3S_URL})"
+            ;;
+    esac
+}
+
 # --- define needed environment variables ---
 setup_env() {
     # --- use command args if passed or create default ---
@@ -127,8 +163,8 @@ setup_env() {
             if [ -z "${K3S_URL}" ]; then
                 CMD_K3S=server
             else
-                if [ -z "${K3S_TOKEN}" ] && [ -z "${K3S_CLUSTER_SECRET}" ]; then
-                    fatal "Defaulted k3s exec command to 'agent' because K3S_URL is defined, but K3S_TOKEN or K3S_CLUSTER_SECRET is not defined."
+                if [ -z "${K3S_TOKEN}" ] && [ -z "${K3S_TOKEN_FILE}" ] && [ -z "${K3S_CLUSTER_SECRET}" ]; then
+                    fatal "Defaulted k3s exec command to 'agent' because K3S_URL is defined, but K3S_TOKEN, K3S_TOKEN_FILE or K3S_CLUSTER_SECRET is not defined."
                 fi
                 CMD_K3S=agent
             fi
@@ -139,6 +175,9 @@ setup_env() {
             shift
         ;;
     esac
+
+    verify_k3s_url
+
     CMD_K3S_EXEC="${CMD_K3S}$(quote_indent "$@")"
 
     # --- use systemd name if defined or create default ---
@@ -160,11 +199,6 @@ setup_env() {
             ${SYSTEM_NAME}
             ${invalid_chars}"
     fi
-
-    # --- set related files from system name ---
-    SERVICE_K3S=${SYSTEM_NAME}.service
-    UNINSTALL_K3S_SH=${SYSTEM_NAME}-uninstall.sh
-    KILLALL_K3S_SH=k3s-killall.sh
 
     # --- use sudo if we are not already root ---
     SUDO=sudo
@@ -197,6 +231,11 @@ setup_env() {
         SYSTEMD_DIR=/etc/systemd/system
     fi
 
+    # --- set related files from system name ---
+    SERVICE_K3S=${SYSTEM_NAME}.service
+    UNINSTALL_K3S_SH=${UNINSTALL_K3S_SH:-${BIN_DIR}/${SYSTEM_NAME}-uninstall.sh}
+    KILLALL_K3S_SH=${KILLALL_K3S_SH:-${BIN_DIR}/k3s-killall.sh}
+
     # --- use service or environment location depending on systemd/openrc ---
     if [ "${HAS_SYSTEMD}" = true ]; then
         FILE_K3S_SERVICE=${SYSTEMD_DIR}/${SERVICE_K3S}
@@ -214,6 +253,10 @@ setup_env() {
     if [ "${INSTALL_K3S_BIN_DIR_READ_ONLY}" = true ]; then
         INSTALL_K3S_SKIP_DOWNLOAD=true
     fi
+
+    # --- setup channel values
+    INSTALL_K3S_CHANNEL_URL=${INSTALL_K3S_CHANNEL_URL:-'https://update.k3s.io/v1-release/channels'}
+    INSTALL_K3S_CHANNEL=${INSTALL_K3S_CHANNEL:-'stable'}
 }
 
 # --- check if skip download environment variable set ---
@@ -286,18 +329,21 @@ setup_tmp() {
     trap cleanup INT EXIT
 }
 
-# --- use desired k3s version if defined or find latest ---
+# --- use desired k3s version if defined or find version from channel ---
 get_release_version() {
-    if [ -n "${INSTALL_K3S_VERSION}" ]; then
+    if [ -n "${INSTALL_K3S_COMMIT}" ]; then
+        VERSION_K3S="commit ${INSTALL_K3S_COMMIT}"
+    elif [ -n "${INSTALL_K3S_VERSION}" ]; then
         VERSION_K3S=${INSTALL_K3S_VERSION}
     else
-        info "Finding latest release"
+        info "Finding release for channel ${INSTALL_K3S_CHANNEL}"
+        version_url="${INSTALL_K3S_CHANNEL_URL}/${INSTALL_K3S_CHANNEL}"
         case $DOWNLOADER in
             curl)
-                VERSION_K3S=$(curl -w '%{url_effective}' -I -L -s -S ${GITHUB_URL}/latest -o /dev/null | sed -e 's|.*/||')
+                VERSION_K3S=$(curl -w '%{url_effective}' -L -s -S ${version_url} -o /dev/null | sed -e 's|.*/||')
                 ;;
             wget)
-                VERSION_K3S=$(wget -SqO /dev/null ${GITHUB_URL}/latest 2>&1 | grep Location | sed -e 's|.*/||')
+                VERSION_K3S=$(wget -SqO /dev/null ${version_url} 2>&1 | grep -i Location | sed -e 's|.*/||')
                 ;;
             *)
                 fatal "Incorrect downloader executable '$DOWNLOADER'"
@@ -329,7 +375,11 @@ download() {
 
 # --- download hash from github url ---
 download_hash() {
-    HASH_URL=${GITHUB_URL}/download/${VERSION_K3S}/sha256sum-${ARCH}.txt
+    if [ -n "${INSTALL_K3S_COMMIT}" ]; then
+        HASH_URL=${STORAGE_URL}/k3s${SUFFIX}-${INSTALL_K3S_COMMIT}.sha256sum
+    else
+        HASH_URL=${GITHUB_URL}/download/${VERSION_K3S}/sha256sum-${ARCH}.txt
+    fi
     info "Downloading hash ${HASH_URL}"
     download ${TMP_HASH} ${HASH_URL}
     HASH_EXPECTED=$(grep " k3s${SUFFIX}$" ${TMP_HASH})
@@ -350,7 +400,11 @@ installed_hash_matches() {
 
 # --- download binary from github url ---
 download_binary() {
-    BIN_URL=${GITHUB_URL}/download/${VERSION_K3S}/k3s${SUFFIX}
+    if [ -n "${INSTALL_K3S_COMMIT}" ]; then
+        BIN_URL=${STORAGE_URL}/k3s${SUFFIX}-${INSTALL_K3S_COMMIT}
+    else
+        BIN_URL=${GITHUB_URL}/download/${VERSION_K3S}/k3s${SUFFIX}
+    fi
     info "Downloading binary ${BIN_URL}"
     download ${TMP_BIN} ${BIN_URL}
 }
@@ -371,18 +425,26 @@ setup_binary() {
     info "Installing k3s to ${BIN_DIR}/k3s"
     $SUDO chown root:root ${TMP_BIN}
     $SUDO mv -f ${TMP_BIN} ${BIN_DIR}/k3s
+}
 
-    if command -v getenforce > /dev/null 2>&1; then
-        if [ "Disabled" != $(getenforce) ]; then
-            if command -v semanage > /dev/null 2>&1; then
-                info 'SELinux is enabled, setting permissions'
-                if ! $SUDO semanage fcontext -l | grep "${BIN_DIR}/k3s" > /dev/null 2>&1; then
-                    $SUDO semanage fcontext -a -t bin_t "${BIN_DIR}/k3s"
-                fi
-                $SUDO restorecon -v ${BIN_DIR}/k3s > /dev/null
-            else
-                fatal 'SELinux is enabled but semanage is not found'
-            fi
+# --- setup selinux policy ---
+setup_selinux() {
+    policy_hint="please install:
+    yum install -y container-selinux selinux-policy-base
+    rpm -i https://rpm.rancher.io/k3s-selinux-0.1.1-rc1.el7.noarch.rpm
+"
+    policy_error=fatal
+    if [ "$INSTALL_K3S_SELINUX_WARN" = true ]; then
+        policy_error=warn
+    fi
+
+    if ! $SUDO chcon -u system_u -r object_r -t container_runtime_exec_t ${BIN_DIR}/k3s >/dev/null 2>&1; then
+        if $SUDO grep '^\s*SELINUX=enforcing' /etc/selinux/config >/dev/null 2>&1; then
+            $policy_error "Failed to apply container_runtime_exec_t to ${BIN_DIR}/k3s, ${policy_hint}"
+        fi
+    else
+        if [ ! -f /usr/share/selinux/packages/k3s.pp ]; then
+            $policy_error "Failed to find the k3s-selinux policy, ${policy_hint}"
         fi
     fi
 }
@@ -418,7 +480,7 @@ create_symlinks() {
 
     for cmd in kubectl crictl ctr; do
         if [ ! -e ${BIN_DIR}/${cmd} ] || [ "${INSTALL_K3S_SYMLINK}" = force ]; then
-            which_cmd=$(which ${cmd} || true)
+            which_cmd=$(which ${cmd} 2>/dev/null || true)
             if [ -z "${which_cmd}" ] || [ "${INSTALL_K3S_SYMLINK}" = force ]; then
                 info "Creating ${BIN_DIR}/${cmd} symlink to k3s"
                 $SUDO ln -sf k3s ${BIN_DIR}/${cmd}
@@ -434,13 +496,13 @@ create_symlinks() {
 # --- create killall script ---
 create_killall() {
     [ "${INSTALL_K3S_BIN_DIR_READ_ONLY}" = true ] && return
-    info "Creating killall script ${BIN_DIR}/${KILLALL_K3S_SH}"
-    $SUDO tee ${BIN_DIR}/${KILLALL_K3S_SH} >/dev/null << \EOF
+    info "Creating killall script ${KILLALL_K3S_SH}"
+    $SUDO tee ${KILLALL_K3S_SH} >/dev/null << \EOF
 #!/bin/sh
 [ $(id -u) -eq 0 ] || exec sudo $0 $@
 
 for bin in /var/lib/rancher/k3s/data/**/bin/; do
-    [ -d $bin ] && export PATH=$bin:$PATH
+    [ -d $bin ] && export PATH=$PATH:$bin:$bin/aux
 done
 
 set -x
@@ -478,7 +540,7 @@ killtree() {
 }
 
 getshims() {
-    lsof | sed -e 's/^[^0-9]*//g; s/  */\t/g' | grep -w 'k3s/data/[^/]*/bin/containerd-shim' | cut -f1 | sort -n -u
+    ps -e -o pid= -o args= | sed -e 's/^ *//; s/\s\s*/\t/;' | grep -w 'k3s/data/[^/]*/bin/containerd-shim' | cut -f1
 }
 
 killtree $({ set +x; } 2>/dev/null; getshims; set -x)
@@ -492,7 +554,7 @@ do_unmount() {
     MOUNTS=$(printf $MOUNTS | grep "^$1" | sort -r)
     if [ -n "${MOUNTS}" ]; then
         set -x
-        umount ${MOUNTS}
+        xargs -n 1 umount <<< ${MOUNTS}
     else
         set -x
     fi
@@ -513,20 +575,20 @@ ip link delete flannel.1
 rm -rf /var/lib/cni/
 iptables-save | grep -v KUBE- | grep -v CNI- | iptables-restore
 EOF
-    $SUDO chmod 755 ${BIN_DIR}/${KILLALL_K3S_SH}
-    $SUDO chown root:root ${BIN_DIR}/${KILLALL_K3S_SH}
+    $SUDO chmod 755 ${KILLALL_K3S_SH}
+    $SUDO chown root:root ${KILLALL_K3S_SH}
 }
 
 # --- create uninstall script ---
 create_uninstall() {
     [ "${INSTALL_K3S_BIN_DIR_READ_ONLY}" = true ] && return
-    info "Creating uninstall script ${BIN_DIR}/${UNINSTALL_K3S_SH}"
-    $SUDO tee ${BIN_DIR}/${UNINSTALL_K3S_SH} >/dev/null << EOF
+    info "Creating uninstall script ${UNINSTALL_K3S_SH}"
+    $SUDO tee ${UNINSTALL_K3S_SH} >/dev/null << EOF
 #!/bin/sh
 set -x
 [ \$(id -u) -eq 0 ] || exec sudo \$0 \$@
 
-${BIN_DIR}/${KILLALL_K3S_SH}
+${KILLALL_K3S_SH}
 
 if which systemctl; then
     systemctl disable ${SYSTEM_NAME}
@@ -541,7 +603,7 @@ rm -f ${FILE_K3S_SERVICE}
 rm -f ${FILE_K3S_ENV}
 
 remove_uninstall() {
-    rm -f ${BIN_DIR}/${UNINSTALL_K3S_SH}
+    rm -f ${UNINSTALL_K3S_SH}
 }
 trap remove_uninstall EXIT
 
@@ -557,13 +619,15 @@ for cmd in kubectl crictl ctr; do
 done
 
 rm -rf /etc/rancher/k3s
+rm -rf /run/k3s
+rm -rf /run/flannel
 rm -rf /var/lib/rancher/k3s
 rm -rf /var/lib/kubelet
 rm -f ${BIN_DIR}/k3s
-rm -f ${BIN_DIR}/${KILLALL_K3S_SH}
+rm -f ${KILLALL_K3S_SH}
 EOF
-    $SUDO chmod 755 ${BIN_DIR}/${UNINSTALL_K3S_SH}
-    $SUDO chown root:root ${BIN_DIR}/${UNINSTALL_K3S_SH}
+    $SUDO chmod 755 ${UNINSTALL_K3S_SH}
+    $SUDO chown root:root ${UNINSTALL_K3S_SH}
 }
 
 # --- disable current service if loaded --
@@ -600,7 +664,9 @@ Type=${SYSTEMD_TYPE}
 EnvironmentFile=${FILE_K3S_ENV}
 KillMode=process
 Delegate=yes
-LimitNOFILE=infinity
+# Having non-zero Limit*s causes performance problems due to accounting overhead
+# in the kernel. We recommend using cgroups to do container-local accounting.
+LimitNOFILE=1048576
 LimitNPROC=infinity
 LimitCORE=infinity
 TasksMax=infinity
@@ -625,6 +691,7 @@ create_openrc_service_file() {
 
 depend() {
     after network-online
+    want cgroups
 }
 
 start_pre() {
@@ -642,6 +709,7 @@ error_log=${LOG_FILE}
 
 pidfile="/var/run/${SYSTEM_NAME}.pid"
 respawn_delay=5
+respawn_max=0
 
 set -o allexport
 if [ -f /etc/environment ]; then source /etc/environment; fi
@@ -696,6 +764,8 @@ openrc_start() {
 
 # --- startup systemd or openrc service ---
 service_enable_and_start() {
+    [ "${INSTALL_K3S_SKIP_ENABLE}" = true ] && return
+
     [ "${HAS_SYSTEMD}" = true ] && systemd_enable
     [ "${HAS_OPENRC}" = true ] && openrc_enable
 
@@ -720,6 +790,7 @@ eval set -- $(escape "${INSTALL_K3S_EXEC}") $(quote "$@")
     verify_system
     setup_env "$@"
     download_and_verify
+    setup_selinux
     create_symlinks
     create_killall
     create_uninstall
