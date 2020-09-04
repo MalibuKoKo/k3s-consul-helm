@@ -2,8 +2,16 @@
 - block:
   - name: install aptitude
     package: name=aptitude force_apt_get=yes
+    register: apt_status
+    until: apt_status is success
+    delay: 6
+    retries: 10
   - name: install packages
     package: name={{ item }} state=present update_cache=yes cache_valid_time=3600
+    register: apt_status
+    until: apt_status is success
+    delay: 6
+    retries: 10
     loop:
       - python-setuptools
       - python-pip
@@ -73,6 +81,6 @@
   - command: yum install jq -y
   when: ansible_os_family == 'RedHat'
 
-- name: snap install lxd
-  snap:
-    name: lxd
+# - name: snap install lxd
+#   snap:
+#     name: lxd

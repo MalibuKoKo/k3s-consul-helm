@@ -24,9 +24,9 @@
     - docker.io
   when: purge
 
-- name: snap remove lxd
-  command: snap remove lxd
-  when: purge
+# - name: snap remove lxd
+#   command: snap remove lxd
+#   when: purge
 
 - name: k3s-uninstall
   shell: "{{ item }}"
